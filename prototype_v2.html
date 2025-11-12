@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PortAI V2 (Live Feed)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f9fa;
+        }
+        .page {
+            display: none; /* 모든 페이지는 기본적으로 숨김 */
+            animation: fadeIn 0.3s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .chat-bubble {
+            border-radius: 20px;
+            padding: 12px 18px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        .chat-bubble-user {
+            background-color: #007bff;
+            color: white;
+            border-bottom-right-radius: 4px;
+            align-self: flex-end;
+        }
+        .chat-bubble-ai {
+            background-color: #ffffff;
+            color: #333;
+            border: 1px solid #e0e0e0;
+            border-bottom-left-radius: 4px;
+            align-self: flex-start;
+        }
+        .stock-card {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .chat-container::-webkit-scrollbar {
+            width: 6px;
+        }
+        .chat-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        .chat-container::-webkit-scrollbar-thumb {
+            background: #c0c0c0;
+            border-radius: 10px;
+        }
+        .chat-container::-webkit-scrollbar-thumb:hover {
+            background: #a0a0e0;
+        }
+
+        /* 실시간 라이브 피드 스타일 */
+        #liveFeedContainer {
+            overflow: hidden;
+            position: relative;
+        }
+        .live-feed-item {
+            background-color: #f3f4f6;
+            border: 1px solid #e5e7eb;
+            /* 애니메이션 시작 상태 */
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: all 0.5s ease-out, background-color 0.2s ease;
+        }
+        .live-feed-item:hover {
+            background-color: #e9f2ff;
+            border-color: #007bff;
+        }
+        /* 애니메이션 활성화 클래스 (JS에서 사용) */
+        .live-feed-item.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div id="app-container" class="max-w-lg mx-auto bg-white min-h-screen shadow-lg">
+
+        <!-- === 1. 메인 페이지 (V2: Live Feed Concept) === -->
+        <div id="mainPage" class="page flex flex-col h-screen">
+            <header class="flex-shrink-0 p-4">
+                <div class="flex justify-between items-center mb-4">
+                    <h1 class="text-2xl font-bold text-blue-600">PortAI</h1>
+                    <button id="goToProButton" class="text-sm bg-gray-800 text-white py-2 px-4 rounded-full font-semibold hover:bg-gray-700 transition">
+                        Pro 전략생성 🤖
+                    </button>
+                </div>
+
+                <div class="mb-4 text-center">
+                    <p class="text-lg font-semibold text-gray-800">AI가 9,000+개 데이터를 분석합니다.</p>
+                    <p class="text-gray-600">어떤 투자 전략을 찾으시나요?</p>
+                </div>
+
+                <div class="relative">
+                    <input id="mainSearchInput" type="text" class="w-full border border-gray-300 rounded-full py-3 px-5 text-base focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="예: 요즘 잘나가는 반도체">
+                    <button id="mainSearchButton" class="absolute right-3 top-1/2 -translate-y-1/2 bg-blue-600 text-white rounded-full p-2 hover:bg-blue-700">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                    </button>
+                </div>
+            </header>
+
+            <!-- '오늘의 AI 시황 브리핑' (Google 문구 제거됨) -->
+            <div class="flex-shrink-0 p-4 pt-2">
+                <div id="todayBriefingCard" 
+                     class="p-5 bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-xl shadow-lg cursor-pointer hover:shadow-xl transition-all transform hover:-translate-y-1 prompt-feed-item"
+                     data-prompt="오늘의 AI 시황 브리핑 (실시간 검색)">
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="text-xl font-bold">⚡️ 오늘의 AI 시황 브리핑 (Live)</h3>
+                        <span class="bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full">HOT</span>
+                    </div>
+                    <p class="text-blue-100 text-sm">AI가 실시간 검색으로 최신 시황과 주요 특징주를 분석합니다.</p>
+                    <button class="mt-3 text-sm font-semibold text-blue-700 bg-white py-2 px-4 rounded-full hover:bg-gray-100">
+                        클릭하여 지금 분석하기
+                    </button>
+                </div>
+            </div>
+
+            <!-- "지금 뜨는 프롬프트" (실시간 유입) -->
+            <div class="flex-grow overflow-hidden px-4">
+                
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center">
+                        <h2 class="text-xl font-bold text-gray-900">💡 지금 뜨는 프롬프트</h2>
+                        <div class="flex items-center ml-3">
+                            <span class="flex h-3 w-3 relative">
+                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                            </span>
+                            <span class="ml-2 text-xs font-semibold text-red-600">LIVE</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 실시간 유입 피드 -->
+                <div id="liveFeedContainer" class="space-y-3">
+                    <!-- JS로 동적 생성 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- === 2. 시그널 상세 페이지 (V2에서는 메인에서 진입점이 없음) === -->
+        <div id="signalPage" class="page p-4">
+            <header class="flex items-center mb-4">
+                <button id="backToMainFromSignal" class="text-blue-600 hover:text-blue-800">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <h2 id="signalStrategyName" class="text-xl font-bold text-center flex-grow">전략 상세</h2>
+            </header>
+            
+            <div class="mb-4">
+                <h3 class="text-lg font-bold mb-2 text-gray-900">누적 수익률 (백테스트)</h3>
+                <div class="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                    <canvas id="strategyChart"></canvas>
+                </div>
+            </div>
+            <div class="mb-4">
+                <h3 class="text-lg font-bold mb-2 text-gray-900">핵심 성과</h3>
+                <div id="perfMetrics" class="grid grid-cols-3 gap-3 bg-white border border-gray-200 rounded-lg p-4 shadow-sm"></div>
+            </div>
+            <div class="bg-white border border-gray-200 rounded-lg p-4 mb-4 shadow-sm">
+                <h3 class="text-lg font-semibold mb-1">전략 설명</h3>
+                <p id="signalStrategyDesc" class="text-gray-700 text-sm"></p>
+            </div>
+            <h3 class="text-lg font-bold mb-3 text-gray-900">오늘의 시그널 (2025-11-11)</h3>
+            <ul class="space-y-3">
+                <li class="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                    <div class="flex justify-between items-center mb-2">
+                        <h4 class="text-lg font-semibold">OO전자 (005930)</h4>
+                        <span class="bg-green-100 text-green-800 text-sm font-medium px-3 py-1 rounded-full">🟢 신규 매수</span>
+                    </div>
+                    <p class="text-gray-600 mb-3">AI 모멘텀 점수 9.2/10, 기관 연속 순매수 포착</p>
+                    <button class="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 transition">
+                        (증권사) 매수하기 ↗️
+                    </button>
+                </li>
+            </ul>
+        </div>
+
+        <!-- === 3. AI 검색 결과 페이지 (Track 1.5) === -->
+        <div id="chatResultPage" class="page flex flex-col h-screen">
+            <header class="flex items-center p-4 bg-white border-b border-gray-200 shadow-sm">
+                <button id="backToMainFromChat" class="text-blue-600 hover:text-blue-800">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <h2 class="text-xl font-bold text-center flex-grow">AI 전략 분석</h2>
+            </header>
+            
+            <div id="chatResultContainer" class="flex-grow p-4 space-y-4 overflow-y-auto chat-container" style="background-color: #f8f9fa;">
+                <!-- 동적으로 채팅 버블 추가 -->
+            </div>
+
+            <footer class="p-4 bg-white border-t border-gray-200">
+                <div class="flex space-x-2">
+                    <input id="chatResultInput" type="text" class="w-full border border-gray-300 rounded-full py-3 px-5 text-base focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="추가 질문을 입력하세요...">
+                    <button id="chatResultSend" class="bg-blue-600 text-white rounded-full p-3 hover:bg-blue-700 transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                    </button>
+                </div>
+            </footer>
+        </div>
+
+        <!-- === 4. Pro 전략 생성 페이지 (Track 2) === -->
+        <div id="proPage" class="page flex flex-col h-screen">
+            <header class="flex items-center p-4 bg-white border-b border-gray-200 shadow-sm">
+                <button id="backToMainFromPro" class="text-blue-600 hover:text-blue-800">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <h2 class="text-xl font-bold text-center flex-grow">🤖 Pro 전략 생성</h2>
+            </header>
+
+            <div id="proChatContainer" class="flex-grow p-4 space-y-4 overflow-y-auto chat-container" style="background-color: #f8f9fa;">
+                <div class="chat-bubble chat-bubble-ai">
+                    안녕하세요! 🤖 PortAI입니다.<br>
+                    어떤 전략을 만들어 볼까요?<br><br>
+                    (예시: PER 10 이하, PBR 1 이하이고, 최근 1개월간 기관이 100억 이상 순매수한 종목을 찾아줘.)
+                </div>
+            </div>
+
+            <footer class="p-4 bg-white border-t border-gray-200">
+                <div class="flex space-x-2">
+                    <input id="proChatInput" type="text" class="w-full border border-gray-300 rounded-full py-3 px-5 text-base focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="전략을 입력하세요...">
+                    <button id="proChatSend" class="bg-blue-600 text-white rounded-full p-3 hover:bg-blue-700 transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                    </button>
+                </div>
+            </footer>
+        </div>
+    </div>
+
+    <!-- 
+    ===============================================================
+    SCRIPT (오류 수정을 위해 모든 로직을 DOMContentLoaded로 감쌈)
+    ===============================================================
+    -->
+    <script type="module">
+        // [수정] 모든 스크립트 로직을 DOMContentLoaded로 감싸
+        // '하얀 화면' (로드 오류)을 근본적으로 해결
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // === 1. 상수 및 변수 정의 ===
+            const API_KEY = "";
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${API_KEY}`;
+            const GOOGLE_SEARCH_TOOL = { "google_search": {} };
+            let currentChart = null; 
+
+            // === 2. DOM 요소 조회 ===
+            // (DOM이 로드된 후에 실행되므로 안전)
+            const pages = {
+                main: document.getElementById('mainPage'),
+                signal: document.getElementById('signalPage'),
+                chatResult: document.getElementById('chatResultPage'),
+                pro: document.getElementById('proPage')
+            };
+
+            const mainSearchInput = document.getElementById('mainSearchInput');
+            const chatResultContainer = document.getElementById('chatResultContainer');
+            const chatResultInput = document.getElementById('chatResultInput');
+            const proChatContainer = document.getElementById('proChatContainer');
+            const proChatInput = document.getElementById('proChatInput');
+            const liveFeedContainer = document.getElementById('liveFeedContainer');
+
+            // === 3. 핵심 함수 정의 ===
+
+            /**
+             * 페이지를 전환하는 함수
+             * @param {string} pageKey - 'main', 'signal', 'chatResult', 'pro'
+             */
+            function showPage(pageKey) {
+                console.log(`Showing page: ${pageKey}`);
+                Object.values(pages).forEach(page => {
+                    if (page) page.style.display = 'none';
+                });
+                const pageToShow = pages[pageKey];
+                if (pageToShow) {
+                    // 'display: block' 대신 'display: flex'가 필요한 페이지 처리
+                    if (pageKey === 'chatResult' || pageKey === 'pro' || pageKey === 'main') {
+                        pageToShow.style.display = 'flex';
+                    } else {
+                        pageToShow.style.display = 'block';
+                    }
+                } else {
+                    console.error(`Page not found for key: ${pageKey}`);
+                }
+            }
+
+            /**
+             * (V1용) 시그널 상세 페이지 표시 함수
+             */
+            function showSignalPage(data) {
+                // (V2에서는 메인에서 사용되지 않지만, 기능은 유지)
+                document.getElementById('signalStrategyName').textContent = data.name;
+                document.getElementById('signalStrategyDesc').textContent = data.desc;
+                const perfMetricsEl = document.getElementById('perfMetrics');
+                if (perfMetricsEl) {
+                    perfMetricsEl.innerHTML = `... (성과 표시) ...`;
+                }
+                showPage('signal');
+                // (차트 그리기 코드 ...)
+            }
+
+            /**
+             * Gemini API 호출 (목업)
+             * @param {string} prompt - 사용자 프롬프트
+             * @param {boolean} useGoogleSearch - 실시간 검색 사용 여부
+             */
+            async function callGemini(prompt, useGoogleSearch = false) {
+                console.log(`Calling Gemini API (Search=${useGoogleSearch}):`, prompt);
+                
+                // --- 목업 응답 (API 키 없이도 작동하도록) ---
+                return new Promise(resolve => {
+                    setTimeout(() => {
+                        let response = `죄송합니다. 지금은 답변을 생성할 수 없습니다. (API 키 필요)`;
+                        if (useGoogleSearch) {
+                             response = `**[오늘의 AI 시황 브리핑 (Live)]**
+                             <br>
+                             (실시간 검색 기반 정보)
+                             <br><br>
+                             - **KOSPI:** 2,850.5 (+1.2%)
+                             - **주요 특징:** AI 및 반도체 섹터가 실시간 뉴스로 인해 강세를 보이며 지수 상승을 견인했습니다. 특히 OO전자와 XX하이닉스의 HBM 관련주가 두드러집니다.
+                             - **오늘의 특징주:** OO전자, XX하이닉스, △△반도체`;
+                        } else if (prompt.includes("반도체") || prompt.includes("HBM")) {
+                             response = `HBM 및 AI 칩 관련 분석입니다. ...`;
+                        } else if (prompt.includes("PER") && prompt.includes("PBR")) {
+                             response = `요청하신 [PER 10 이하, PBR 1 이하] 조건으로 전략을 생성했습니다. ...`;
+                        } else {
+                            response = `"${prompt}"에 대한 분석을 완료했습니다. ...`;
+                        }
+                        resolve(response);
+                    }, 1500);
+                });
+            }
+
+            /**
+             * Gemini API 분석 호출 (목업)
+             */
+            async function callGeminiForAnalysis(prompt) {
+                console.log("Calling Gemini API (Analysis):", prompt);
+                // --- 목업 응답 ---
+                return new Promise(resolve => {
+                    setTimeout(() => {
+                        let response = `죄송합니다. 지금은 답변을 생성할 수 없습니다. (API 키 필요)`;
+                        if (prompt.includes("선정 이유")) {
+                            response = `AI가 해당 종목들을 선정한 이유는 다음과 같습니다.
+                            1.  **OO전자:** HBM3E 시장 선도...
+                            2.  **XX하이닉스:** 안정적인 HBM 수율...
+                            3.  **△△반도체:** 차세대 패키징 기술...`;
+                        } else if (prompt.includes("시황")) {
+                            response = `AI가 실시간 검색을 기반으로 오늘 시황을 분석한 결과입니다. ... (이하 분석 내용)`;
+                        } else {
+                             response = `"${prompt}"에 대한 분석을 완료했습니다.`;
+                        }
+                        resolve(response);
+                    }, 1000);
+                });
+            }
+
+            /**
+             * 채팅 메시지 UI에 추가
+             */
+            function addChatMessage(container, message, sender) {
+                if (!container) return;
+                const bubble = document.createElement('div');
+                bubble.classList.add('chat-bubble', sender === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai');
+                if (sender === 'ai-loading') {
+                    bubble.id = 'ai-loading-bubble';
+                    bubble.classList.remove('chat-bubble-ai');
+                    bubble.innerHTML = '<div class="flex items-center space-x-2"><div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div><div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div><div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.4s"></div></div>';
+                } else {
+                    bubble.innerHTML = message.replace(/\n/g, '<br>');
+                }
+                container.appendChild(bubble);
+                container.scrollTop = container.scrollHeight;
+            }
+
+            /**
+             * 로딩 인디케이터 제거
+             */
+            function removeLoadingIndicator() {
+                const loadingBubble = document.getElementById('ai-loading-bubble');
+                if (loadingBubble) {
+                    loadingBubble.remove();
+                }
+            }
+            
+            /**
+             * V2용 '실시간 라이브 피드' 시작 함수
+             */
+            function startLiveFeed() {
+                if (!liveFeedContainer) return;
+
+                const prompts = [
+                    "PER 10 이하, PBR 1 이하인 저평가 가치주 찾아줘",
+                    "HBM 관련주 중에 모멘텀이 가장 강한 종목은?",
+                    "안정적인 배당주 포트폴리오 5종목 추천",
+                    "RSI 30 이하 과매도 구간 종목",
+                    "최근 1주일간 기관 순매수 상위 10종목",
+                    "2차전지 관련주 최근 뉴스 요약해줘",
+                    "오늘 외국인과 기관이 동시에 순매수한 종목",
+                    "MACD 골든크로스 발생한 코스닥 종목"
+                ];
+                let promptIndex = 0;
+
+                setInterval(() => {
+                    // 1. 새 피드 아이템 생성
+                    const feedItem = document.createElement('div');
+                    feedItem.className = 'live-feed-item prompt-feed-item p-4 rounded-lg cursor-pointer transition-all duration-300';
+                    const currentPrompt = prompts[promptIndex];
+                    feedItem.dataset.prompt = currentPrompt;
+                    
+                    feedItem.innerHTML = `
+                        <div class="flex justify-between items-center">
+                            <p class="font-semibold text-gray-800 truncate pr-4">${currentPrompt}</p>
+                            <span class="text-xs text-blue-500 font-medium flex-shrink-0">방금 전</span>
+                        </div>
+                    `;
+                    
+                    // 2. 클릭 리스너 추가
+                    feedItem.addEventListener('click', () => {
+                        mainSearchInput.value = currentPrompt;
+                        handleMainSearch();
+                    });
+
+                    // 3. 목록 최상단에 삽입
+                    liveFeedContainer.prepend(feedItem);
+                    
+                    // 4. 애니메이션 트리거 (중요)
+                    // (requestAnimationFrame을 사용하여 브라우저가 요소를 인지한 후 클래스를 추가)
+                    requestAnimationFrame(() => {
+                        feedItem.classList.add('show');
+                    });
+
+                    // 5. 5개가 넘으면 가장 오래된 항목 제거
+                    if (liveFeedContainer.children.length > 5) {
+                        const oldItem = liveFeedContainer.lastElementChild;
+                        oldItem.classList.remove('show'); // 사라지는 애니메이션
+                        oldItem.style.opacity = '0';
+                        oldItem.addEventListener('transitionend', () => {
+                            oldItem.remove();
+                        });
+                    }
+
+                    // 6. 인덱스 업데이트
+                    promptIndex = (promptIndex + 1) % prompts.length;
+                    
+                }, 3000); // 3초마다
+            }
+
+            /**
+             * 메인 검색창 핸들러 (V2)
+             */
+            async function handleMainSearch() {
+                const query = mainSearchInput.value.trim();
+                if (query === "") return;
+
+                showPage('chatResult');
+                chatResultContainer.innerHTML = ''; // 채팅창 초기화
+                addChatMessage(chatResultContainer, query, 'user');
+                addChatMessage(chatResultContainer, '...loading...', 'ai-loading');
+                
+                // [수정됨] '시황 브리핑' 프롬프트 분기 처리 (실시간 검색 사용)
+                if (query.includes("시황 브리핑")) {
+                    const briefingResponse = await callGemini(query, true); // <--- useGoogleSearch = true
+                    removeLoadingIndicator();
+                    addChatMessage(chatResultContainer, briefingResponse, 'ai');
+                    
+                    addChatMessage(chatResultContainer, '...loading...', 'ai-loading');
+                    const analysisPrompt = `위 시황 기반 추천 종목 2개 선정 이유 분석`;
+                    const analysisResult = await callGeminiForAnalysis(analysisPrompt); 
+                    removeLoadingIndicator();
+                    addChatMessage(chatResultContainer, analysisResult, 'ai');
+
+                } else {
+                    // (기존의) 목업 종목 카드
+                    await new Promise(r => setTimeout(r, 500));
+                    removeLoadingIndicator();
+                    const stockCardsHTML = `
+                        <p class="text-sm text-gray-700 mb-2">AI가 "${query}" 관련 종목 2개를 추천합니다.</p>
+                        <div class="stock-card">
+                            <h4 class="text-lg font-semibold">OO전자 (005930)</h4>
+                            <p class="text-gray-600 text-sm mt-1">AI 칩, HBM3E 시장 선도</p>
+                            <button class="w-full mt-3 bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 transition text-sm">
+                                (증권사) 매수하기 ↗️
+                            </button>
+                        </div>
+                        <div class="stock-card">
+                            <h4 class="text-lg font-semibold">XX하이닉스 (000660)</h4>
+                            <p class="text-gray-600 text-sm mt-1">안정적인 HBM 수율 확보</p>
+                            <button class="w-full mt-3 bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 transition text-sm">
+                                (증권사) 매수하기 ↗️
+                            </button>
+                        </div>
+                    `;
+                    addChatMessage(chatResultContainer, stockCardsHTML);
+
+                    // AI 분석 이유
+                    addChatMessage(chatResultContainer, '...loading...', 'ai-loading');
+                    const analysisPrompt = `위 종목 2개를 선정한 이유를 자세히 분석해줘.`;
+                    const analysisResult = await callGeminiForAnalysis(analysisPrompt);
+                    removeLoadingIndicator();
+                    addChatMessage(chatResultContainer, analysisResult, 'ai');
+                }
+                
+                mainSearchInput.value = ""; // 검색 후 메인 검색창 비우기
+            }
+
+            /**
+             * Pro 채팅 핸들러
+             */
+            async function handleProChatSend() {
+                const query = proChatInput.value.trim();
+                if (query === "") return;
+                addChatMessage(proChatContainer, query, 'user');
+                proChatInput.value = "";
+                addChatMessage(proChatContainer, '...loading...', 'ai-loading');
+                const response = await callGemini(query, false); // Pro는 기본적으로 검색 미사용
+                removeLoadingIndicator();
+                addChatMessage(proChatContainer, response, 'ai');
+            }
+
+            /**
+             * AI 검색 결과 (추가 질문) 핸들러
+             */
+            async function handleChatResultSend() {
+                const query = chatResultInput.value.trim();
+                if (query === "") return;
+                addChatMessage(chatResultContainer, query, 'user');
+                chatResultInput.value = "";
+                addChatMessage(chatResultContainer, '...loading...', 'ai-loading');
+                const response = await callGemini(query, false); // 추가 질문은 기본적으로 검색 미사용
+                removeLoadingIndicator();
+                addChatMessage(proChatContainer, response, 'ai');
+            }
+
+            /**
+             * === 4. 모든 이벤트 리스너 설정 ===
+             * [FIX] 모든 ID 조회 및 이벤트 리스너에 옵셔널 체이닝(?.
+)을 추가하여 안정성 확보
+             */
+            function setupEventListeners() {
+                document.getElementById('goToProButton')?.addEventListener('click', () => showPage('pro'));
+
+                // '오늘의 AI 시황 브리핑' 배너 클릭
+                document.getElementById('todayBriefingCard')?.addEventListener('click', () => {
+                    const prompt = document.getElementById('todayBriefingCard').dataset.prompt;
+                    mainSearchInput.value = prompt;
+                    handleMainSearch();
+                });
+
+                // (라이브 피드 항목 클릭은 startLiveFeed 함수 내에서 동적으로 생성될 때마다 추가됨)
+
+                // 페이지 이동 버튼들
+                document.getElementById('backToMainFromSignal')?.addEventListener('click', () => showPage('main'));
+                document.getElementById('backToMainFromPro')?.addEventListener('click', () => showPage('main'));
+                document.getElementById('backToMainFromChat')?.addEventListener('click', () => showPage('main'));
+
+                // 채팅 입력 핸들러
+                document.getElementById('proChatSend')?.addEventListener('click', handleProChatSend);
+                proChatInput?.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') handleProChatSend();
+                });
+                document.getElementById('chatResultSend')?.addEventListener('click', handleChatResultSend);
+                chatResultInput?.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') handleChatResultSend();
+                });
+
+                // 메인 검색창 핸들l
+                document.getElementById('mainSearchButton')?.addEventListener('click', handleMainSearch);
+                mainSearchInput?.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') handleMainSearch();
+                });
+            }
+            
+            // === 5. 앱 초기 실행 ===
+            setupEventListeners();
+            showPage('main'); // 초기 페이지 설정
+            startLiveFeed(); // 라이브 피드 시작
+
+        }); // [수정] DOMContentLoaded 래퍼 종료
+
+    </script>
+</body>
+</html>
